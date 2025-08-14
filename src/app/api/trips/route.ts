@@ -45,6 +45,8 @@ export async function GET(req: NextRequest) {
       
       params['itd_date'] = yyyymmdd
       params['itd_time'] = hhmm_nodash
+      // Set departure vs arrival mode
+      params['itd_trip_date_time_dep_arr'] = arriveBy ? 'arr' : 'dep'
     }
   }
 

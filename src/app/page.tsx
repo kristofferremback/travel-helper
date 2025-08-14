@@ -186,14 +186,8 @@ export default function PlannerPage() {
         <section className="space-y-4">
           <div className="flex items-center gap-4 min-h-[3rem]">
             {/* Leave now toggle */}
-            <label className="inline-flex items-center gap-3 cursor-pointer group flex-shrink-0">
+            <div className="inline-flex items-center gap-3 cursor-pointer group flex-shrink-0" onClick={() => setUseNow(!useNow)}>
               <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={useNow}
-                  onChange={(e) => setUseNow(e.target.checked)}
-                  className="sr-only"
-                />
                 <div className={`w-6 h-6 rounded-lg border-2 transition-all duration-200 ${
                   useNow 
                     ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 border-violet-400 shadow-lg' 
@@ -213,7 +207,7 @@ export default function PlannerPage() {
                 </div>
               </div>
               <span className="text-white font-medium whitespace-nowrap">Leave now</span>
-            </label>
+            </div>
 
             {/* Spacer to prevent layout shift */}
             <div className="flex-1 flex items-center gap-4 overflow-hidden">

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 
 function pad(n: number) {
   return String(n).padStart(2, "0")
@@ -34,6 +35,7 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLButtonElement | null>(null)
   const [internal, setInternal] = useState<Date>(() => parseLocal(value))
+  const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 })
 
   useEffect(() => {
     setInternal(parseLocal(value))
@@ -134,23 +136,46 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
   const minutes = Array.from({ length: 12 }, (_, i) => i * 5) // step 5
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block" style={{ position: 'relative' }}>
       <button
         ref={anchorRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-        className={`border rounded px-2 py-1 bg-white ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"}`}
+        onClick={() => {
+          console.log('DateTimePicker button clicked, current open:', open)
+          if (!open && anchorRef.current) {
+            const rect = anchorRef.current.getBoundingClientRect()
+            setPopoverPosition({
+              top: rect.bottom + window.scrollY + 4,
+              left: rect.left + window.scrollX
+            })
+          }
+          setOpen((v) => !v)
+        }}
+        className={`border rounded px-2 py-1 bg-white text-gray-900 relative z-10 ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
         {new Date(parseLocal(value)).toLocaleString([], { hour12: false, year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
       </button>
-      {open && (
+      {open && createPortal(
         <div
           id="dtp-popover"
           role="dialog"
-          className="absolute z-20 mt-2 w-[320px] rounded border bg-white shadow-lg p-3"
+          className="w-[320px] rounded border bg-white shadow-2xl p-3"
+          style={{ 
+            position: 'absolute',
+            top: popoverPosition.top,
+            left: popoverPosition.left,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            border: '2px solid #333'
+          }}
+          ref={(el) => {
+            if (el) {
+              console.log('Popover rendered at:', el.getBoundingClientRect())
+            }
+          }}
         >
           <div className="flex items-center justify-between mb-2">
             <button type="button" className="px-2 py-1 hover:bg-gray-100 rounded" onClick={() => goMonth(-1)} aria-label="Previous month">◀</button>
@@ -205,7 +230,8 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
             <button type="button" className="px-3 py-1 rounded hover:bg-gray-100" onClick={() => setOpen(false)}>Cancel</button>
             <button type="button" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={commit}>Set</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
