@@ -68,10 +68,16 @@ openssl rand -base64 32
 # Copy output to NEXTAUTH_SECRET in .env
 ```
 
-6. **Start Development Server**
+6. **Start Development Server** (auto-starts database!)
 ```bash
 yarn dev
 ```
+
+This will automatically:
+- ✅ Start PostgreSQL database in Docker
+- ✅ Wait for database to be ready
+- ✅ Run Prisma migrations
+- ✅ Start Next.js development server
 
 Open http://localhost:3000 and sign in with Google!
 
