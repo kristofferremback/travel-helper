@@ -56,10 +56,16 @@ cp .env.example .env
    - Add `http://localhost:3000/api/auth/callback/google` to authorized redirect URIs
    - Copy Client ID and Secret to `.env`
 
-4. **Database Setup**
+4. **Database Setup** (optional - auto-runs with `yarn dev`)
 ```bash
-yarn prisma generate
-yarn prisma migrate dev --name init
+# Generate Prisma client
+yarn prisma:generate
+
+# Push schema to database (creates tables)
+yarn prisma:push
+
+# Open database browser (optional)
+yarn prisma:studio
 ```
 
 5. **Generate NextAuth Secret**
@@ -80,6 +86,21 @@ This will automatically:
 - ✅ Start Next.js development server
 
 Open http://localhost:3000 and sign in with Google!
+
+## 🗄️ Database Commands
+
+| Command | Description |
+|---------|-------------|
+| `yarn dev` | 🟢 **Start everything** (DB + app) |
+| `yarn db:up` | Start PostgreSQL container |
+| `yarn db:down` | Stop PostgreSQL container |
+| `yarn db:reset` | Reset container (delete all data) |
+| `yarn prisma:generate` | Generate Prisma client from schema |
+| `yarn prisma:push` | Push schema changes to database |
+| `yarn prisma:studio` | Open database browser UI |
+| `yarn prisma:reset` | Reset database and run migrations |
+
+💡 **Most used**: `yarn dev` (starts everything), `yarn prisma:studio` (view data)
 
 ## 🚀 Deployment to Vercel
 
