@@ -1,4 +1,4 @@
-name: Deploy to Vercel
+name: Build and Test
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     
     steps:
@@ -23,20 +23,15 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
         
-      - name: Run type check
+      - name: Run type check and build
         run: yarn build
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          
-      - name: Deploy to Vercel
-        uses: vercel/action@v1
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.ORG_ID }}
-          vercel-project-id: ${{ secrets.PROJECT_ID }}
-          vercel-args: --prod
-        if: github.ref == 'refs/heads/main'
+          DATABASE_URL: "file:./dev.db"
+          NEXTAUTH_URL: "http://localhost:3000"
+          NEXTAUTH_SECRET: "test-secret-for-ci"
+          GOOGLE_CLIENT_ID: "dummy-client-id"
+          GOOGLE_CLIENT_SECRET: "dummy-client-secret"
+          SL_JP2_BASE_URL: "https://journeyplanner.integration.sl.se/v2"
+          SL_TRANSPORT_BASE_URL: "https://transport.integration.sl.se/v1"
+          SL_DEVIATIONS_BASE_URL: "https://deviations.integration.sl.se/v1"
+          SL_MIN_FETCH_INTERVAL_MS: "60000"
