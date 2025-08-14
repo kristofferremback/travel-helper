@@ -78,7 +78,7 @@ Open http://localhost:3000 and sign in with Google!
 ## 🚀 Deployment to Vercel
 
 ### Quick Deploy
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-username/travel-helper)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/kristofferremback/travel-helper)
 
 ### Manual Deployment
 

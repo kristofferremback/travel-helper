@@ -36,7 +36,7 @@ Choose one of these options:
 ### 3. Vercel Deployment
 
 #### Option A: One-Click Deploy
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-username/travel-helper)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/kristofferremback/travel-helper)
 
 #### Option B: Manual Setup
 1. Push your code to GitHub
@@ -123,7 +123,7 @@ Now every push to `main` branch will automatically deploy to Vercel!
 
 ### Getting Help
 
-- Check the [GitHub Issues](https://github.com/your-username/travel-helper/issues)
+- Check the [GitHub Issues](https://github.com/kristofferremback/travel-helper/issues)
 - Review [Vercel Documentation](https://vercel.com/docs)
 - Check [NextAuth.js Documentation](https://next-auth.js.org)
 
