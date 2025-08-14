@@ -406,6 +406,7 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
         qs.set('toLat', String(dest.latitude))
         qs.set('toLon', String(dest.longitude))
         qs.set('num', '3')
+
         if (!useNow && when) {
           qs.set('when', when)
           if (arriveBy) qs.set('arriveBy', 'true')
@@ -414,10 +415,16 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
         const r1 = await fetch(u1)
         const d1 = await r1.json()
         let journeys: any[] = Array.isArray(d1?.journeys) ? d1.journeys : []
-        // Only paginate when using "Leave now" with Depart at; avoid shifting user-selected time or arrival-by behavior
+        // Mark main query trips as preferred (only the first one will be recommended)
+        journeys = journeys.map((j, index) => ({ ...j, isFromMainQuery: true }))
+
+        
+        // Get more trips: for "Leave now" get later trips, for scheduled times get trips before/after
         let more: any[] = []
-        const shouldPaginate = useNow && !arriveBy
-        if (shouldPaginate && journeys.length >= 1) {
+        const shouldPaginateNow = useNow && !arriveBy
+        const shouldGetSurrounding = !useNow && when
+        
+        if (shouldPaginateNow && journeys.length >= 1) {
           const lastFirstLeg = journeys[journeys.length - 1]?.legs?.[0]
           const when0 = lastFirstLeg?.origin?.estimated || lastFirstLeg?.origin?.planned
           if (when0) {
@@ -430,11 +437,84 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
               const u2 = `/api/trips?${qs2.toString()}`
               const r2 = await fetch(u2)
               const d2 = await r2.json()
-              more = Array.isArray(d2?.journeys) ? d2.journeys : []
+              more = Array.isArray(d2?.journeys) ? d2.journeys.map((j: any) => ({ ...j, isFromMainQuery: false })) : []
             }
           }
         }
+        
+        // For scheduled trips, get trips around the selected time
+        if (shouldGetSurrounding) {
+          try {
+            // Get earlier trips (15 minutes before) and later trips (30 minutes after)
+            // Parse as local time by adding timezone offset
+            const [datePart, timePart] = when.split('T')
+            const [year, month, day] = datePart.split('-').map(Number)
+            const [hour, minute] = timePart.split(':').map(Number)
+            
+            const selectedTime = new Date(year, month - 1, day, hour, minute)
+            const earlierTime = new Date(selectedTime.getTime() - 15 * 60 * 1000)
+            const laterTime = new Date(selectedTime.getTime() + 30 * 60 * 1000)
+            
+
+            
+            // Format times as local YYYY-MM-DDTHH:MM
+            const formatLocalTime = (date: Date) => {
+              const yyyy = date.getFullYear()
+              const mm = String(date.getMonth() + 1).padStart(2, '0')
+              const dd = String(date.getDate()).padStart(2, '0')
+              const HH = String(date.getHours()).padStart(2, '0')
+              const MM = String(date.getMinutes()).padStart(2, '0')
+              return `${yyyy}-${mm}-${dd}T${HH}:${MM}`
+            }
+            
+            const qsEarlier = new URLSearchParams(qs)
+            qsEarlier.set('when', formatLocalTime(earlierTime))
+            qsEarlier.set('num', '2')
+            if (arriveBy) qsEarlier.set('arriveBy', 'true')
+            
+            const qsLater = new URLSearchParams(qs)
+            qsLater.set('when', formatLocalTime(laterTime))
+            qsLater.set('num', '2')
+            if (arriveBy) qsLater.set('arriveBy', 'true')
+            
+            const [rEarlier, rLater] = await Promise.all([
+              fetch(`/api/trips?${qsEarlier.toString()}`),
+              fetch(`/api/trips?${qsLater.toString()}`)
+            ])
+            
+            const [dEarlier, dLater] = await Promise.all([
+              rEarlier.json(),
+              rLater.json()
+            ])
+            
+            const earlierJourneys = Array.isArray(dEarlier?.journeys) ? dEarlier.journeys.map((j: any) => ({ ...j, isFromMainQuery: false })) : []
+            const laterJourneys = Array.isArray(dLater?.journeys) ? dLater.journeys.map((j: any) => ({ ...j, isFromMainQuery: false })) : []
+            
+            more = [...earlierJourneys, ...laterJourneys]
+          } catch (error) {
+            console.log('Failed to get surrounding trips:', error)
+          }
+        }
         const merged = [...journeys, ...more]
+        
+        // Sort all merged trips chronologically by departure time
+        merged.sort((a: any, b: any) => {
+          const aDept = a.legs?.[0]?.origin?.estimated || a.legs?.[0]?.origin?.planned
+          const bDept = b.legs?.[0]?.origin?.estimated || b.legs?.[0]?.origin?.planned
+          
+          if (aDept && bDept) {
+            const aTime = new Date(aDept).getTime()
+            const bTime = new Date(bDept).getTime()
+            if (aTime !== bTime) return aTime - bTime
+          }
+          
+          // If same departure time, prefer main query trips, then by SL order
+          if (a.isFromMainQuery !== b.isFromMainQuery) {
+            return a.isFromMainQuery ? -1 : 1
+          }
+          return a.slPreferredOrder - b.slPreferredOrder
+        })
+        
         const seen = new Set<string>()
         const unique = [] as any[]
         for (const j of merged) {
@@ -460,7 +540,22 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
             unique.push(j)
           }
         }
-        const combined = unique.slice(0, 5)
+        
+        // Filter out past trips when using "Leave now"
+        let filtered = unique
+        if (useNow) {
+          const now = new Date()
+          filtered = unique.filter((j: any) => {
+            const firstLeg = j?.legs?.[0]
+            const departTime = firstLeg?.origin?.estimated || firstLeg?.origin?.planned
+            if (!departTime) return true // Keep trips without departure time
+            const departDate = new Date(departTime)
+            return departDate > now // Only future trips
+          })
+        }
+        
+        const combined = filtered.slice(0, 5)
+
         if (!cancelled) setTrips(combined)
       } finally {
         if (!cancelled) setLoading(false)
@@ -480,19 +575,19 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
       : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   }
 
-  const first = trips?.[0]
-  const firstDepart = first?.legs?.[0]?.origin
-  const firstArrive = first?.legs?.[first?.legs?.length - 1]?.destination
+  const preferred = trips?.find(t => t.slPreferredOrder === 0 && t.isFromMainQuery === true) || trips?.[0]
+  const firstDepart = preferred?.legs?.[0]?.origin
+  const firstArrive = preferred?.legs?.[preferred?.legs?.length - 1]?.destination
 
   return (
     <div>
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium">{dest.name}</div>
-          {first ? (
+          {preferred ? (
             <div className="text-sm text-gray-700">
               {fmt(firstDepart?.estimated || firstDepart?.planned)} →{' '}
-              {fmt(firstArrive?.estimated || firstArrive?.planned)} · {Math.round((first.duration ?? 0) / 60)}{' '}
+              {fmt(firstArrive?.estimated || firstArrive?.planned)} · {Math.round((preferred.duration ?? 0) / 60)}{' '}
               min
             </div>
           ) : loading ? (
@@ -533,12 +628,24 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
             const depart = j.legs?.[0]?.origin
             const arrive = j.legs?.[j.legs.length - 1]?.destination
             const isActive = active === i
+            const isPreferred = j.slPreferredOrder === 0 && j.isFromMainQuery === true // SL's top choice from main query only
             return (
               <li key={i} className="text-sm">
-                <button className="w-full text-left p-3 rounded-lg hover:bg-white/20 transition-colors duration-200 flex items-center justify-between group" onClick={() => setActive(isActive ? null : i)}>
-                  <div>
-                    {fmt(depart?.estimated || depart?.planned)} → {fmt(arrive?.estimated || arrive?.planned)} ·{' '}
-                    {Math.round((j.duration ?? 0) / 60)} min
+                <button className={`w-full text-left p-3 rounded-lg transition-colors duration-200 flex items-center justify-between group ${
+                  isPreferred 
+                    ? 'bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 border border-violet-400/30 hover:from-violet-500/30 hover:to-fuchsia-500/30' 
+                    : 'hover:bg-white/20'
+                }`} onClick={() => setActive(isActive ? null : i)}>
+                  <div className="flex items-center gap-2">
+                    <span>
+                      {fmt(depart?.estimated || depart?.planned)} → {fmt(arrive?.estimated || arrive?.planned)} ·{' '}
+                      {Math.round((j.duration ?? 0) / 60)} min
+                    </span>
+                    {isPreferred && (
+                      <span className="text-xs bg-gradient-to-r from-violet-400 to-fuchsia-400 text-white px-2 py-0.5 rounded-full font-medium">
+                        ⭐ Recommended
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 text-violet-300 group-hover:text-white transition-colors duration-200">
                     <span className="text-xs">Details</span>

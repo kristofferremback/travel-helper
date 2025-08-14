@@ -54,8 +54,9 @@ export async function GET(req: NextRequest) {
   const { data } = await axios.get(url, { params, timeout: 20000 })
 
   // Normalize the response to only what we need
-  const journeys = (data?.journeys ?? []).map((j: any) => ({
+  const journeys = (data?.journeys ?? []).map((j: any, index: number) => ({
     duration: j.tripRtDuration ?? j.tripDuration,
+    slPreferredOrder: index, // Keep SL's original preferred order
     legs: (j.legs ?? []).map((l: any) => ({
       mode: l.transportation?.mode ?? l.transportation?.name ?? 'WALK',
       line: l.transportation?.line ?? null,
@@ -76,8 +77,20 @@ export async function GET(req: NextRequest) {
     })),
   }))
 
-  // Sort by duration ascending
-  journeys.sort((a: any, b: any) => (a.duration ?? Infinity) - (b.duration ?? Infinity))
+  // Sort by departure time, but preserve SL's preference for same departure times
+  journeys.sort((a: any, b: any) => {
+    const aDept = a.legs?.[0]?.origin?.estimated || a.legs?.[0]?.origin?.planned
+    const bDept = b.legs?.[0]?.origin?.estimated || b.legs?.[0]?.origin?.planned
+    
+    if (aDept && bDept) {
+      const aTime = new Date(aDept).getTime()
+      const bTime = new Date(bDept).getTime()
+      if (aTime !== bTime) return aTime - bTime
+    }
+    
+    // If same departure time (or missing times), use SL's preferred order
+    return a.slPreferredOrder - b.slPreferredOrder
+  })
 
   return NextResponse.json({ journeys, debug: { sent: params } })
 }

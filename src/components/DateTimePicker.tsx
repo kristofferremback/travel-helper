@@ -142,7 +142,6 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
         type="button"
         disabled={disabled}
         onClick={() => {
-          console.log('DateTimePicker button clicked, current open:', open)
           if (!open && anchorRef.current) {
             const rect = anchorRef.current.getBoundingClientRect()
             setPopoverPosition({
@@ -171,11 +170,7 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
             backgroundColor: 'white',
             border: '2px solid #333'
           }}
-          ref={(el) => {
-            if (el) {
-              console.log('Popover rendered at:', el.getBoundingClientRect())
-            }
-          }}
+          ref={() => {}}
         >
           <div className="flex items-center justify-between mb-2">
             <button type="button" className="px-2 py-1 hover:bg-gray-100 rounded" onClick={() => goMonth(-1)} aria-label="Previous month">◀</button>
