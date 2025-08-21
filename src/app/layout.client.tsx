@@ -22,7 +22,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </a>
           <nav className="text-sm flex items-center gap-6">
             <a className="text-violet-100 hover:text-cyan-200 hover:underline font-medium transition-colors duration-200" href="/">Planner</a>
-            <a className="text-violet-100 hover:text-cyan-200 hover:underline font-medium transition-colors duration-200" href="/addresses">Addresses</a>
+            <a className="text-violet-100 hover:text-cyan-200 hover:underline font-medium transition-colors duration-200" href="/trips">Trips</a>
             <AuthButton />
           </nav>
         </div>

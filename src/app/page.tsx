@@ -2,10 +2,12 @@
 
 export const dynamic = 'force-dynamic'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import axios from 'axios'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
+import { useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import Typeahead from '../components/Typeahead'
 import ModeBadge, { LineBadge } from '../components/ModeBadge'
 import DateTimePicker from '../components/DateTimePicker'
@@ -19,34 +21,73 @@ type Site = {
   fullName?: string
 }
 
+// Saved trip types
+ type PlaceSite = {
+  kind: 'site'
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+  type?: string
+}
+
+ type PlaceAddress = {
+  kind: 'address'
+  name: string
+  address: string
+  latitude: number
+  longitude: number
+}
+
+ type Place = PlaceSite | PlaceAddress
+
+ type SavedTrip = {
+  id: string
+  label?: string | null
+  fromPlace: Place
+  toPlace: Place
+  pinned?: boolean
+  position?: number | null
+}
+
 const fetcher = (url: string) => axios.get(url).then((r) => r.data)
 
 export default function PlannerPage() {
   const [from, setFrom] = useState<Site | null>(null)
-  const [showSearch, setShowSearch] = useState(false)
-  const [showLocationPicker, setShowLocationPicker] = useState(false)
+  const [to, setTo] = useState<Site | null>(null)
+
   const [useNow, setUseNow] = useState(true)
   const [when, setWhen] = useState<string>('')
   const [arriveBy, setArriveBy] = useState(false)
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
   const [isLoadingLocation, setIsLoadingLocation] = useState(true)
+  const searchParams = useSearchParams()
+  const [urlDest, setUrlDest] = useState<Site | null>(null)
+  const [currentPos, setCurrentPos] = useState<{ lat: number; lon: number } | null>(null)
+  const [reverseState, setReverseState] = useState<Record<string, 'smart' | 'normal' | 'reversed'>>({})
   
-  const { data: saved } = useSWR('/api/addresses', fetcher)
+  // Session-gated fetch of saved trips
+  const { data: session } = useSession()
+  const { data: savedTripsData, mutate: mutateTrips } = useSWR(session ? '/api/saved-trips' : null, fetcher)
+  const trips: SavedTrip[] = useMemo(() => savedTripsData?.trips ?? [], [savedTripsData])
+  
+  const savedPlaces: Site[] = useMemo(() => {
+    const arr: Site[] = []
+    for (const t of trips) {
+      const fp: any = t.fromPlace
+      const tp: any = t.toPlace
+      if (fp?.latitude && fp?.longitude) arr.push({ id: fp.id || `${t.id}:from`, name: fp.name, latitude: fp.latitude, longitude: fp.longitude, type: fp.kind, fullName: fp.name })
+      if (tp?.latitude && tp?.longitude) arr.push({ id: tp.id || `${t.id}:to`, name: tp.name, latitude: tp.latitude, longitude: tp.longitude, type: tp.kind, fullName: tp.name })
+    }
+    const seen = new Set<string>()
+    const uniq: Site[] = []
+    for (const s of arr) {
+      const key = `${s.name}:${s.latitude}:${s.longitude}`
+      if (!seen.has(key)) { seen.add(key); uniq.push(s) }
+    }
+    return uniq
+  }, [trips])
 
-  // Handle Escape key for search modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showSearch) {
-        setShowSearch(false)
-        setShowLocationPicker(false)
-      }
-    }
-    
-    if (showSearch) {
-      document.addEventListener('keydown', handleKeyDown)
-      return () => document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [showSearch])
 
   // Initialize default time to now (local)
   useEffect(() => {
@@ -58,6 +99,27 @@ export default function PlannerPage() {
     const MM = String(d.getMinutes()).padStart(2, '0')
     setWhen(`${yyyy}-${mm}-${dd}T${HH}:${MM}`)
   }, [])
+
+  // Prefill from/to from URL
+  useEffect(() => {
+    if (!searchParams) return
+    const fromLat = searchParams.get('fromLat')
+    const fromLon = searchParams.get('fromLon')
+    const fromName = searchParams.get('fromName')
+    const fromKind = searchParams.get('fromKind') || 'site'
+    const toLat = searchParams.get('toLat')
+    const toLon = searchParams.get('toLon')
+    const toName = searchParams.get('toName')
+    const toKind = searchParams.get('toKind') || 'site'
+
+    if (fromLat && fromLon && fromName) {
+      setFrom({ id: searchParams.get('fromId') || 'from', name: fromName, latitude: Number(fromLat), longitude: Number(fromLon), type: fromKind, fullName: fromName })
+    }
+    if (toLat && toLon && toName) {
+      setUrlDest({ id: searchParams.get('toId') || 'to', name: toName, latitude: Number(toLat), longitude: Number(toLon), type: toKind, fullName: toName })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // On mount, try geolocation and pick nearby stops (but only if user hasn't interacted)
   useEffect(() => {
@@ -75,6 +137,7 @@ export default function PlannerPage() {
       async (pos) => {
         try {
           const { latitude, longitude } = pos.coords
+          setCurrentPos({ lat: latitude, lon: longitude })
           const res = await fetch(`/api/nearby-stops?lat=${latitude}&lon=${longitude}&limit=3`)
           const data = await res.json()
           if (data?.results?.length) {
@@ -93,20 +156,23 @@ export default function PlannerPage() {
   return (
     <>
       <main className="space-y-6">
-        {/* From selection */}
+        {/* From/To selection */}
         <section className="space-y-3">
-          {from ? (
-            <div className="p-4 bg-gradient-to-r from-violet-100/80 to-fuchsia-100/60 rounded-xl shadow-sm space-y-4">
-              <div>
-                <div className="font-medium">From: {from.name}</div>
-                {from.fullName && <div className="text-sm text-gray-600">{from.fullName}</div>}
-              </div>
-              
-              {/* Quick select options */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <Typeahead
+                label="From"
+                value={from ? from.name : undefined}
+                onChangeText={() => setFrom(null)}
+                onSelect={(s) => { setHasUserInteracted(true); setFrom({ ...(s as any), type: (s as any).type ?? 'unknown' } as Site) }}
+                placeholder="Search stop or address"
+                clearable
+                onClear={() => setFrom(null)}
+              />
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-400/20 to-teal-400/20 hover:from-cyan-400/30 hover:to-teal-400/30 rounded-full text-sm font-medium transition-all duration-200 hover:scale-105 text-cyan-800"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 hover:scale-105 bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/20"
                   onClick={async () => {
                     try {
                       setHasUserInteracted(true)
@@ -125,60 +191,34 @@ export default function PlannerPage() {
                   <span>📍</span>
                   Current location
                 </button>
-                
-                {saved?.addresses?.map((a: any) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-400/20 to-purple-400/20 hover:from-violet-400/30 hover:to-purple-400/30 rounded-full text-sm font-medium transition-all duration-200 hover:scale-105 text-violet-800"
-                    onClick={() => {
-                      setHasUserInteracted(true)
-                      setFrom({
-                        id: a.id,
-                        name: a.label,
-                        fullName: a.address,
-                        latitude: a.latitude,
-                        longitude: a.longitude,
-                        type: 'saved',
-                      })
-                    }}
-                  >
-                    <span>
-                      {/home|hem/i.test(a.label) ? '🏠' : /work|office|jobb/i.test(a.label) ? '🏢' : '📍'}
-                    </span>
-                    {a.label}
+                {savedPlaces.map((p) => (
+                  <button key={`from-${p.id}`} type="button" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/12 hover:bg-white/20 text-white/95 ring-1 ring-white/20" onClick={() => { setHasUserInteracted(true); setFrom(p) }}>
+                    <span>📍</span>
+                    {p.name}
                   </button>
                 ))}
-                
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-rose-400/20 to-pink-400/20 hover:from-rose-400/30 hover:to-pink-400/30 rounded-full text-sm font-medium transition-all duration-200 hover:scale-105 text-rose-800"
-                  onClick={() => setShowSearch(true)}
-                >
-                  <span>🔍</span>
-                  Search for other
-                </button>
               </div>
             </div>
-          ) : isLoadingLocation ? (
-            <div className="text-center py-12">
-              <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/10 backdrop-blur-sm rounded-xl">
-                <div className="animate-spin h-5 w-5 border-2 border-violet-300 border-t-transparent rounded-full"></div>
-                <span className="text-white/90">Finding your cosmic location...</span>
+            <div className="space-y-3">
+              <Typeahead
+                label="To"
+                value={to ? to.name : undefined}
+                onChangeText={() => setTo(null)}
+                onSelect={(s) => { setHasUserInteracted(true); setTo({ ...(s as any), type: (s as any).type ?? 'unknown' } as Site) }}
+                placeholder="Search stop or address"
+                clearable
+                onClear={() => setTo(null)}
+              />
+              <div className="flex flex-wrap gap-2">
+                {savedPlaces.map((p) => (
+                  <button key={`to-${p.id}`} type="button" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/12 hover:bg-white/20 text-white/95 ring-1 ring-white/20" onClick={() => { setHasUserInteracted(true); setTo(p) }}>
+                    <span>🎯</span>
+                    {p.name}
+                  </button>
+                ))}
               </div>
             </div>
-          ) : (
-            <div className="text-center py-12">
-              <h2 className="font-semibold mb-6 text-white/90">Choose your starting location</h2>
-              <button
-                type="button"
-                className="px-6 py-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl hover:from-violet-700 hover:to-fuchsia-700 transition-all duration-200 hover:scale-105 shadow-sm hover:shadow-md"
-                onClick={() => setShowLocationPicker(true)}
-              >
-                Select location
-              </button>
-            </div>
-          )}
+          </div>
         </section>
 
       {/* Time controls - show when From is set */}
@@ -304,90 +344,163 @@ export default function PlannerPage() {
       )}
 
       {/* Quick Look - main content */}
-      {from && saved?.addresses?.length > 0 && (
+      {from && (
         <section className="space-y-4">
           <ul className="space-y-3">
-            {saved.addresses.map((a: any) => (
-              <li key={a.id} className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
-                <DestinationTrips
-                  from={from}
-                  dest={{
-                    id: a.id,
-                    name: a.label,
-                    fullName: a.address,
-                    latitude: a.latitude,
-                    longitude: a.longitude,
-                    type: 'saved',
-                  }}
-                  useNow={useNow}
-                  when={when}
-                  arriveBy={arriveBy}
-                />
+            {to && (
+              <li className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
+                <DestinationTrips from={from} dest={to} useNow={useNow} when={when} arriveBy={arriveBy} />
               </li>
-            ))}
+            )}
+            {urlDest && (
+              <li className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
+                <DestinationTrips from={from} dest={urlDest} useNow={useNow} when={when} arriveBy={arriveBy} />
+              </li>
+            )}
+            {trips.map((t) => {
+              const { fromSite, toSite, mode } = computeEndpoints(t, currentPos, reverseState[t.id])
+              return (
+                <li key={t.id} className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
+                  <DestinationTrips
+                    from={fromSite}
+                    dest={toSite}
+                    useNow={useNow}
+                    when={when}
+                    arriveBy={arriveBy}
+                    extraActions={
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="text-xs px-2 py-1 rounded-lg bg-white/30 hover:bg-white/50 text-violet-900"
+                          onClick={() => setReverseState((m) => ({ ...m, [t.id]: 'reversed' }))}
+                          title="Reverse (manual)"
+                        >↔︎ Reverse</button>
+                        <button
+                          type="button"
+                          className="text-xs px-2 py-1 rounded-lg bg-white/30 hover:bg-white/50 text-violet-900"
+                          onClick={() => setReverseState((m) => ({ ...m, [t.id]: 'normal' }))}
+                          title="Use saved order"
+                        >→ Normal</button>
+                        {mode !== 'smart' && (
+                          <button
+                            type="button"
+                            className="text-xs px-2 py-1 rounded-lg bg-white/20 hover:bg-white/40 text-violet-900"
+                            onClick={() => setReverseState((m) => ({ ...m, [t.id]: 'smart' }))}
+                            title="Use smart reverse"
+                          >💡 Smart</button>
+                        )}
+                      </div>
+                    }
+                  />
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
     </main>
 
     {/* Alfred/Spotlight-style search overlay */}
-    <AnimatePresence>
-      {showSearch && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gradient-to-br from-violet-900/50 to-fuchsia-900/50 backdrop-blur-sm z-50 flex items-start justify-center pt-32"
-            onClick={() => {
-              setShowSearch(false)
-              setShowLocationPicker(false)
-            }}
-          >
-            {/* Search modal */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: -20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="bg-gradient-to-br from-white/95 to-violet-50/90 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-visible border-0 ring-1 ring-violet-200/50"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <span className="text-violet-400">🔍</span>
-                  <span className="text-violet-700 font-medium">Search for a location</span>
-                </div>
-                <div className="relative z-60">
-                  <Typeahead
-                    clearable
-                    label=""
-                    placeholder="Type a stop name or address..."
-                    onSelect={(s) => {
-                      setHasUserInteracted(true)
-                      setFrom({ ...(s as any), type: (s as any).type ?? 'unknown' } as Site)
-                      setShowLocationPicker(false)
-                      setShowSearch(false)
-                    }}
-                  />
-                </div>
-                <div className="mt-4 text-xs text-violet-600/70 flex items-center gap-4">
-                  <span>⏎ to select</span>
-                  <span>Esc to close</span>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
 
   </>
   )
 }
 
-function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; dest: any; useNow: boolean; when: string; arriveBy: boolean }) {
+function toSiteFromPlace(p: Place): Site {
+  const anyp: any = p
+  return {
+    id: anyp.id || `${anyp.kind}:${anyp.name}`,
+    name: anyp.name,
+    latitude: anyp.latitude,
+    longitude: anyp.longitude,
+    type: anyp.kind,
+    fullName: anyp.address || anyp.name,
+  }
+}
+
+function distanceMeters(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const R = 6371000
+  const toRad = (x: number) => (x * Math.PI) / 180
+  const dLat = toRad(bLat - aLat)
+  const dLon = toRad(bLon - aLon)
+  const lat1 = toRad(aLat)
+  const lat2 = toRad(bLat)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function computeEndpoints(t: SavedTrip, currentPos: { lat: number; lon: number } | null, modeIn?: 'smart' | 'normal' | 'reversed') {
+  const fp = toSiteFromPlace(t.fromPlace)
+  const tp = toSiteFromPlace(t.toPlace)
+  const mode = modeIn || 'smart'
+  if (mode === 'normal') return { fromSite: fp, toSite: tp, mode }
+  if (mode === 'reversed') return { fromSite: tp, toSite: fp, mode }
+  // smart
+  if (currentPos && fp.latitude != null && fp.longitude != null && tp.latitude != null && tp.longitude != null) {
+    const dFrom = distanceMeters(currentPos.lat, currentPos.lon, fp.latitude!, fp.longitude!)
+    const dTo = distanceMeters(currentPos.lat, currentPos.lon, tp.latitude!, tp.longitude!)
+    if (dFrom <= dTo) return { fromSite: fp, toSite: tp, mode: 'smart' }
+    return { fromSite: tp, toSite: fp, mode: 'smart' }
+  }
+  return { fromSite: fp, toSite: tp, mode: 'smart' }
+}
+
+function runLinkFromTrip(t: SavedTrip) {
+  const fp = t.fromPlace as any
+  const tp = t.toPlace as any
+  const qs = new URLSearchParams()
+  qs.set('fromName', fp.name)
+  qs.set('fromLat', String(fp.latitude))
+  qs.set('fromLon', String(fp.longitude))
+  qs.set('fromKind', fp.kind)
+  if (fp.id) qs.set('fromId', String(fp.id))
+
+  qs.set('toName', tp.name)
+  qs.set('toLat', String(tp.latitude))
+  qs.set('toLon', String(tp.longitude))
+  qs.set('toKind', tp.kind)
+  if (tp.id) qs.set('toId', String(tp.id))
+
+  return `/?${qs.toString()}`
+}
+
+function YourTripsSection({ trips, onMutate }: { trips: SavedTrip[]; onMutate: (() => void) | undefined }) {
+  async function togglePin(t: SavedTrip) {
+    await axios.put(`/api/saved-trips/${t.id}`, { pinned: !t.pinned })
+    onMutate?.()
+  }
+  async function removeTrip(id: string) {
+    await axios.delete(`/api/saved-trips/${id}`)
+    onMutate?.()
+  }
+  if (!trips?.length) return null
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-xl">⭐</span>
+        <h2 className="text-lg font-semibold text-white">Your trips</h2>
+      </div>
+      <ul className="space-y-3">
+        {trips.map((t) => (
+          <li key={t.id} className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01] flex items-center justify-between">
+            <div>
+              <div className="font-medium text-violet-800">{t.label || `${(t.fromPlace as any).name} → ${(t.toPlace as any).name}`}</div>
+              <div className="text-sm text-violet-600/80">{(t.fromPlace as any).name} → {(t.toPlace as any).name}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a href={runLinkFromTrip(t)} className="text-sm px-3 py-1 rounded-lg bg-violet-600/90 text-white hover:bg-violet-700 transition-colors">Run</a>
+              <button className="text-sm px-3 py-1 rounded-lg bg-white/40 hover:bg-white/60 text-violet-800 transition-colors" onClick={() => togglePin(t)}>{t.pinned ? 'Unpin' : 'Pin'}</button>
+              <button className="text-rose-500 text-sm hover:text-rose-600 transition-colors duration-200 px-3 py-1 hover:bg-rose-50/50 rounded-lg" onClick={() => removeTrip(t.id)}>🗑️ Delete</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function DestinationTrips({ from, dest, useNow, when, arriveBy, extraActions }: { from: any; dest: any; useNow: boolean; when: string; arriveBy: boolean; extraActions?: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false)
   const [trips, setTrips] = useState<any[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -425,19 +538,46 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
         const shouldGetSurrounding = !useNow && when
         
         if (shouldPaginateNow && journeys.length >= 1) {
+          // Helper to format local time like YYYY-MM-DDTHH:MM
+          const formatLocalTime = (date: Date) => {
+            const yyyy = date.getFullYear()
+            const mm = String(date.getMonth() + 1).padStart(2, '0')
+            const dd = String(date.getDate()).padStart(2, '0')
+            const HH = String(date.getHours()).padStart(2, '0')
+            const MM = String(date.getMinutes()).padStart(2, '0')
+            return `${yyyy}-${mm}-${dd}T${HH}:${MM}`
+          }
+
+          // Fetch later trips (after the last one from main query)
           const lastFirstLeg = journeys[journeys.length - 1]?.legs?.[0]
-          const when0 = lastFirstLeg?.origin?.estimated || lastFirstLeg?.origin?.planned
-          if (when0) {
-            const t = new Date(when0)
+          const whenLast = lastFirstLeg?.origin?.estimated || lastFirstLeg?.origin?.planned
+          if (whenLast) {
+            const t = new Date(whenLast)
             if (!Number.isNaN(t.getTime())) {
               t.setMinutes(t.getMinutes() + 1)
-              const iso = t.toISOString()
-              const qs2 = new URLSearchParams(qs)
-              qs2.set('when', iso)
-              const u2 = `/api/trips?${qs2.toString()}`
-              const r2 = await fetch(u2)
+              const qsLater = new URLSearchParams(qs)
+              qsLater.set('when', formatLocalTime(t))
+              const r2 = await fetch(`/api/trips?${qsLater.toString()}`)
               const d2 = await r2.json()
-              more = Array.isArray(d2?.journeys) ? d2.journeys.map((j: any) => ({ ...j, isFromMainQuery: false })) : []
+              const later = Array.isArray(d2?.journeys) ? d2.journeys.map((j: any) => ({ ...j, isFromMainQuery: false })) : []
+              more = more.concat(later)
+            }
+          }
+
+          // Also fetch preceding trips (before the first one from main query)
+          const firstFirstLeg = journeys[0]?.legs?.[0]
+          const whenFirst = firstFirstLeg?.origin?.estimated || firstFirstLeg?.origin?.planned
+          if (whenFirst) {
+            const t = new Date(whenFirst)
+            if (!Number.isNaN(t.getTime())) {
+              t.setMinutes(t.getMinutes() - 15)
+              const qsEarlier = new URLSearchParams(qs)
+              qsEarlier.set('when', formatLocalTime(t))
+              qsEarlier.set('num', '3')
+              const rPrev = await fetch(`/api/trips?${qsEarlier.toString()}`)
+              const dPrev = await rPrev.json()
+              const earlier = Array.isArray(dPrev?.journeys) ? dPrev.journeys.map((j: any) => ({ ...j, isFromMainQuery: false, isPreceding: true })) : []
+              more = earlier.concat(more)
             }
           }
         }
@@ -541,21 +681,28 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
           }
         }
         
-        // Filter out past trips when using "Leave now"
-        let filtered = unique
+        // Build combined list
+        let combined = unique.slice(0, 5)
         if (useNow) {
-          const now = new Date()
-          filtered = unique.filter((j: any) => {
-            const firstLeg = j?.legs?.[0]
-            const departTime = firstLeg?.origin?.estimated || firstLeg?.origin?.planned
-            if (!departTime) return true // Keep trips without departure time
-            const departDate = new Date(departTime)
-            return departDate > now // Only future trips
-          })
+        const now = new Date()
+        const withTimes = unique.map((j: any) => {
+        const dt = j?.legs?.[0]?.origin?.estimated || j?.legs?.[0]?.origin?.planned || ''
+        const dnum = dt ? new Date(dt).getTime() : Number.POSITIVE_INFINITY
+        return { j, dt, dnum }
+        })
+        const preceding = withTimes.filter((x) => Number.isFinite(x.dnum) && x.dnum < now.getTime()).map((x) => x.j)
+        const future = withTimes.filter((x) => !Number.isFinite(x.dnum) || x.dnum >= now.getTime()).map((x) => x.j)
+        const precedingTail = preceding.slice(-1) // keep up to last 1 past trip for context
+        const futureHead = future.slice(0, 3) // show up to 3 future trips
+          combined = precedingTail.concat(futureHead)
+                 // If we still have room (less than 4 total), append more future trips
+          if (combined.length < 4) {
+            combined = combined.concat(future.slice(futureHead.length, 4 - combined.length + futureHead.length)).slice(0, 4)
+          } else {
+            combined = combined.slice(0, 4)
+          }
         }
-        
-        const combined = filtered.slice(0, 5)
-
+ 
         if (!cancelled) setTrips(combined)
       } finally {
         if (!cancelled) setLoading(false)
@@ -575,7 +722,24 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
       : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   }
 
-  const preferred = trips?.find(t => t.slPreferredOrder === 0 && t.isFromMainQuery === true) || trips?.[0]
+  // Pick recommended trip:
+  // For Leave now: first future trip; else top from main query; else first item
+  const getDepart = (tr: any) => tr?.legs?.[0]?.origin?.estimated || tr?.legs?.[0]?.origin?.planned
+  let preferred: any | undefined
+  if (useNow && Array.isArray(trips)) {
+    const now = new Date()
+    preferred = trips.find((t) => {
+      const dt = getDepart(t)
+      if (!dt) return false
+      const d = new Date(dt)
+      return !Number.isNaN(d.getTime()) && d > now
+    }) || undefined
+  }
+  if (!preferred) {
+    preferred = trips?.find(t => t.isFromMainQuery === true && t.slPreferredOrder === 0)
+  }
+  if (!preferred && Array.isArray(trips) && trips.length > 0) preferred = trips[0]
+
   const firstDepart = preferred?.legs?.[0]?.origin
   const firstArrive = preferred?.legs?.[preferred?.legs?.length - 1]?.destination
 
@@ -583,7 +747,7 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-medium">{dest.name}</div>
+          <div className="font-medium">{from?.name} → {dest.name}</div>
           {preferred ? (
             <div className="text-sm text-gray-700">
               {fmt(firstDepart?.estimated || firstDepart?.planned)} →{' '}
@@ -596,31 +760,34 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
             <div className="text-sm text-violet-400/60">No routes found</div>
           )}
         </div>
-        {trips && trips.length > 0 && (
-          <button 
-            type="button" 
-            className="text-sm text-violet-200 hover:text-white transition-colors duration-200 flex items-center gap-1"
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? (
-              <>
-                <span className="text-xs">✨</span>
-                <span>Collapse</span>
-                <svg className="w-3 h-3 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                </svg>
-              </>
-            ) : (
-              <>
-                <span className="text-xs">🚀</span>
-                <span>Explore more</span>
-                <svg className="w-3 h-3 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </>
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {extraActions}
+          {trips && trips.length > 0 && (
+            <button 
+              type="button" 
+              className="text-sm text-violet-200 hover:text-white transition-colors duration-200 flex items-center gap-1"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? (
+                <>
+                  <span className="text-xs">✨</span>
+                  <span>Collapse</span>
+                  <svg className="w-3 h-3 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs">🚀</span>
+                  <span>Explore more</span>
+                  <svg className="w-3 h-3 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
       {expanded && trips && trips.length > 0 ? (
         <ol className="mt-2 space-y-2">
@@ -628,7 +795,7 @@ function DestinationTrips({ from, dest, useNow, when, arriveBy }: { from: any; d
             const depart = j.legs?.[0]?.origin
             const arrive = j.legs?.[j.legs.length - 1]?.destination
             const isActive = active === i
-            const isPreferred = j.slPreferredOrder === 0 && j.isFromMainQuery === true // SL's top choice from main query only
+            const isPreferred = j === preferred
             return (
               <li key={i} className="text-sm">
                 <button className={`w-full text-left p-3 rounded-lg transition-colors duration-200 flex items-center justify-between group ${

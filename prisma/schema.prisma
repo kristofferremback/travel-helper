@@ -43,6 +43,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   addresses     Address[]
+  trips         Trip[]
 }
 
 model VerificationToken {
@@ -64,6 +65,19 @@ model Address {
   user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Trip {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String?
+  fromPlace  Json
+  toPlace    Json
+  pinned     Boolean  @default(false)
+  position   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Site {

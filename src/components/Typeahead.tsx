@@ -106,7 +106,7 @@ export default function Typeahead({ label, placeholder, value, onChangeText, onS
 
   return (
     <div ref={rootRef} className="relative" data-ta-root>
-      <label className="block text-sm text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-white/90 drop-shadow mb-1">{label}</label>
       <div className="relative">
         <input
           ref={inputRef}
