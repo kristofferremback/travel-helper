@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import axios from 'axios'
 import { motion } from 'framer-motion'
@@ -61,7 +61,6 @@ export default function PlannerPage() {
   const [arriveBy, setArriveBy] = useState(false)
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
   const [isLoadingLocation, setIsLoadingLocation] = useState(true)
-  const searchParams = useSearchParams()
   const [urlDest, setUrlDest] = useState<Site | null>(null)
   const [currentPos, setCurrentPos] = useState<{ lat: number; lon: number } | null>(null)
   const [reverseState, setReverseState] = useState<Record<string, 'smart' | 'normal' | 'reversed'>>({})
@@ -100,26 +99,7 @@ export default function PlannerPage() {
     setWhen(`${yyyy}-${mm}-${dd}T${HH}:${MM}`)
   }, [])
 
-  // Prefill from/to from URL
-  useEffect(() => {
-    if (!searchParams) return
-    const fromLat = searchParams.get('fromLat')
-    const fromLon = searchParams.get('fromLon')
-    const fromName = searchParams.get('fromName')
-    const fromKind = searchParams.get('fromKind') || 'site'
-    const toLat = searchParams.get('toLat')
-    const toLon = searchParams.get('toLon')
-    const toName = searchParams.get('toName')
-    const toKind = searchParams.get('toKind') || 'site'
-
-    if (fromLat && fromLon && fromName) {
-      setFrom({ id: searchParams.get('fromId') || 'from', name: fromName, latitude: Number(fromLat), longitude: Number(fromLon), type: fromKind, fullName: fromName })
-    }
-    if (toLat && toLon && toName) {
-      setUrlDest({ id: searchParams.get('toId') || 'to', name: toName, latitude: Number(toLat), longitude: Number(toLon), type: toKind, fullName: toName })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
+  // URL prefill handled by child component below (wrapped in Suspense)
 
   // On mount, try geolocation and pick nearby stops (but only if user hasn't interacted)
   useEffect(() => {
@@ -156,6 +136,10 @@ export default function PlannerPage() {
   return (
     <>
       <main className="space-y-6">
+        {/* URL prefill (Suspense) */}
+        <Suspense fallback={null}>
+          <UrlPrefill onFrom={setFrom} onDest={setUrlDest} />
+        </Suspense>
         {/* From/To selection */}
         <section className="space-y-3">
           <div className="grid gap-4 md:grid-cols-2">
@@ -498,6 +482,29 @@ function YourTripsSection({ trips, onMutate }: { trips: SavedTrip[]; onMutate: (
       </ul>
     </section>
   )
+}
+
+function UrlPrefill({ onFrom, onDest }: { onFrom: (s: Site) => void; onDest: (s: Site | null) => void }) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (!searchParams) return
+    const fromLat = searchParams.get('fromLat')
+    const fromLon = searchParams.get('fromLon')
+    const fromName = searchParams.get('fromName')
+    const fromKind = searchParams.get('fromKind') || 'site'
+    const toLat = searchParams.get('toLat')
+    const toLon = searchParams.get('toLon')
+    const toName = searchParams.get('toName')
+    const toKind = searchParams.get('toKind') || 'site'
+
+    if (fromLat && fromLon && fromName) {
+      onFrom({ id: searchParams.get('fromId') || 'from', name: fromName, latitude: Number(fromLat), longitude: Number(fromLon), type: fromKind, fullName: fromName })
+    }
+    if (toLat && toLon && toName) {
+      onDest({ id: searchParams.get('toId') || 'to', name: toName, latitude: Number(toLat), longitude: Number(toLon), type: toKind, fullName: toName })
+    }
+  }, [searchParams, onFrom, onDest])
+  return null
 }
 
 function DestinationTrips({ from, dest, useNow, when, arriveBy, extraActions }: { from: any; dest: any; useNow: boolean; when: string; arriveBy: boolean; extraActions?: React.ReactNode }) {
