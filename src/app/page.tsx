@@ -6,11 +6,12 @@ import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import axios from 'axios'
 import { motion } from 'framer-motion'
-import { useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Typeahead from '../components/Typeahead'
+import UrlPrefill from '../components/UrlPrefill'
 import ModeBadge, { LineBadge } from '../components/ModeBadge'
 import DateTimePicker from '../components/DateTimePicker'
+import { Button, Chip } from '@/components/ui'
 
 type Site = {
   id: string
@@ -101,44 +102,44 @@ export default function PlannerPage() {
 
   // URL prefill handled by child component below (wrapped in Suspense)
 
-  // On mount, try geolocation and pick nearby stops (but only if user hasn't interacted)
+  // On mount, try geolocation and pick nearby stops (only once, only if no user interaction)
   useEffect(() => {
-    if (from || hasUserInteracted) {
-      setIsLoadingLocation(false)
-      return
-    }
+    let cancelled = false
     
-    if (!navigator.geolocation) {
+    // Only run once on mount, and only if user hasn't interacted and no 'from' is set
+    if (from || hasUserInteracted || !navigator.geolocation) {
       setIsLoadingLocation(false)
       return
     }
     
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        if (cancelled) return
         try {
           const { latitude, longitude } = pos.coords
           setCurrentPos({ lat: latitude, lon: longitude })
           const res = await fetch(`/api/nearby-stops?lat=${latitude}&lon=${longitude}&limit=3`)
           const data = await res.json()
-          if (data?.results?.length) {
+          if (!cancelled && data?.results?.length && !hasUserInteracted) {
             setFrom(data.results[0])
           }
         } catch {}
-        setIsLoadingLocation(false)
+        if (!cancelled) setIsLoadingLocation(false)
       },
       (error) => {
-        setIsLoadingLocation(false)
+        if (!cancelled) setIsLoadingLocation(false)
       }
     )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, hasUserInteracted])
+    
+    return () => { cancelled = true }
+  }, []) // Empty dependency array - only run once on mount
 
   return (
     <>
       <main className="space-y-6">
         {/* URL prefill (Suspense) */}
         <Suspense fallback={null}>
-          <UrlPrefill onFrom={setFrom} onDest={setUrlDest} />
+          <UrlPrefill onFromChange={setFrom} onToChange={setUrlDest} />
         </Suspense>
         {/* From/To selection */}
         <section className="space-y-3">
@@ -147,16 +148,20 @@ export default function PlannerPage() {
               <Typeahead
                 label="From"
                 value={from ? from.name : undefined}
-                onChangeText={() => setFrom(null)}
+                onChangeText={(text) => {
+                  // Only clear 'from' if the input is completely empty
+                  if (!text || text.trim() === '') {
+                    setFrom(null)
+                  }
+                }}
                 onSelect={(s) => { setHasUserInteracted(true); setFrom({ ...(s as any), type: (s as any).type ?? 'unknown' } as Site) }}
                 placeholder="Search stop or address"
                 clearable
                 onClear={() => setFrom(null)}
               />
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 hover:scale-105 bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/20"
+                <Button
+                  variant="outline"
                   onClick={async () => {
                     try {
                       setHasUserInteracted(true)
@@ -174,12 +179,16 @@ export default function PlannerPage() {
                 >
                   <span>📍</span>
                   Current location
-                </button>
+                </Button>
                 {savedPlaces.map((p) => (
-                  <button key={`from-${p.id}`} type="button" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/12 hover:bg-white/20 text-white/95 ring-1 ring-white/20" onClick={() => { setHasUserInteracted(true); setFrom(p) }}>
-                    <span>📍</span>
+                  <Chip
+                    key={`from-${p.id}`}
+                    variant="location"
+                    icon={<span>📍</span>}
+                    onClick={() => { setHasUserInteracted(true); setFrom(p) }}
+                  >
                     {p.name}
-                  </button>
+                  </Chip>
                 ))}
               </div>
             </div>
@@ -187,7 +196,12 @@ export default function PlannerPage() {
               <Typeahead
                 label="To"
                 value={to ? to.name : undefined}
-                onChangeText={() => setTo(null)}
+                onChangeText={(text) => {
+                  // Only clear 'to' if the input is completely empty
+                  if (!text || text.trim() === '') {
+                    setTo(null)
+                  }
+                }}
                 onSelect={(s) => { setHasUserInteracted(true); setTo({ ...(s as any), type: (s as any).type ?? 'unknown' } as Site) }}
                 placeholder="Search stop or address"
                 clearable
@@ -195,18 +209,21 @@ export default function PlannerPage() {
               />
               <div className="flex flex-wrap gap-2">
                 {savedPlaces.map((p) => (
-                  <button key={`to-${p.id}`} type="button" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/12 hover:bg-white/20 text-white/95 ring-1 ring-white/20" onClick={() => { setHasUserInteracted(true); setTo(p) }}>
-                    <span>🎯</span>
+                  <Chip
+                    key={`to-${p.id}`}
+                    variant="location"
+                    icon={<span>🎯</span>}
+                    onClick={() => { setHasUserInteracted(true); setTo(p) }}
+                  >
                     {p.name}
-                  </button>
+                  </Chip>
                 ))}
               </div>
             </div>
           </div>
         </section>
 
-      {/* Time controls - show when From is set */}
-      {from && (
+      {/* Time controls - always visible for global trip planning */}
         <section className="space-y-4">
           <div className="flex items-center gap-4 min-h-[3rem]">
             {/* Leave now toggle */}
@@ -325,22 +342,33 @@ export default function PlannerPage() {
             </div>
           </div>
         </section>
-      )}
 
-      {/* Quick Look - main content */}
-      {from && (
+      {/* Ad-hoc trip - only when both from and to are selected */}
+      {from && from.latitude && from.longitude && to && to.latitude && to.longitude && (
         <section className="space-y-4">
           <ul className="space-y-3">
-            {to && (
-              <li className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
-                <DestinationTrips from={from} dest={to} useNow={useNow} when={when} arriveBy={arriveBy} />
-              </li>
-            )}
-            {urlDest && (
-              <li className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
-                <DestinationTrips from={from} dest={urlDest} useNow={useNow} when={when} arriveBy={arriveBy} />
-              </li>
-            )}
+            <li className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
+              <DestinationTrips from={from} dest={to} useNow={useNow} when={when} arriveBy={arriveBy} />
+            </li>
+          </ul>
+        </section>
+      )}
+
+      {/* URL destination trip - only when from is set and URL destination exists */}
+      {from && from.latitude && from.longitude && urlDest && urlDest.latitude && urlDest.longitude && (
+        <section className="space-y-4">
+          <ul className="space-y-3">
+            <li className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:scale-[1.02]">
+              <DestinationTrips from={from} dest={urlDest} useNow={useNow} when={when} arriveBy={arriveBy} />
+            </li>
+          </ul>
+        </section>
+      )}
+
+      {/* Saved trips - always show when there are trips, regardless of from/to state */}
+      {trips.length > 0 && (
+        <section className="space-y-4">
+          <ul className="space-y-3">
             {trips.map((t) => {
               const { fromSite, toSite, mode } = computeEndpoints(t, currentPos, reverseState[t.id])
               return (
@@ -449,63 +477,7 @@ function runLinkFromTrip(t: SavedTrip) {
   return `/?${qs.toString()}`
 }
 
-function YourTripsSection({ trips, onMutate }: { trips: SavedTrip[]; onMutate: (() => void) | undefined }) {
-  async function togglePin(t: SavedTrip) {
-    await axios.put(`/api/saved-trips/${t.id}`, { pinned: !t.pinned })
-    onMutate?.()
-  }
-  async function removeTrip(id: string) {
-    await axios.delete(`/api/saved-trips/${id}`)
-    onMutate?.()
-  }
-  if (!trips?.length) return null
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-xl">⭐</span>
-        <h2 className="text-lg font-semibold text-white">Your trips</h2>
-      </div>
-      <ul className="space-y-3">
-        {trips.map((t) => (
-          <li key={t.id} className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01] flex items-center justify-between">
-            <div>
-              <div className="font-medium text-violet-800">{t.label || `${(t.fromPlace as any).name} → ${(t.toPlace as any).name}`}</div>
-              <div className="text-sm text-violet-600/80">{(t.fromPlace as any).name} → {(t.toPlace as any).name}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <a href={runLinkFromTrip(t)} className="text-sm px-3 py-1 rounded-lg bg-violet-600/90 text-white hover:bg-violet-700 transition-colors">Run</a>
-              <button className="text-sm px-3 py-1 rounded-lg bg-white/40 hover:bg-white/60 text-violet-800 transition-colors" onClick={() => togglePin(t)}>{t.pinned ? 'Unpin' : 'Pin'}</button>
-              <button className="text-rose-500 text-sm hover:text-rose-600 transition-colors duration-200 px-3 py-1 hover:bg-rose-50/50 rounded-lg" onClick={() => removeTrip(t.id)}>🗑️ Delete</button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
 
-function UrlPrefill({ onFrom, onDest }: { onFrom: (s: Site) => void; onDest: (s: Site | null) => void }) {
-  const searchParams = useSearchParams()
-  useEffect(() => {
-    if (!searchParams) return
-    const fromLat = searchParams.get('fromLat')
-    const fromLon = searchParams.get('fromLon')
-    const fromName = searchParams.get('fromName')
-    const fromKind = searchParams.get('fromKind') || 'site'
-    const toLat = searchParams.get('toLat')
-    const toLon = searchParams.get('toLon')
-    const toName = searchParams.get('toName')
-    const toKind = searchParams.get('toKind') || 'site'
-
-    if (fromLat && fromLon && fromName) {
-      onFrom({ id: searchParams.get('fromId') || 'from', name: fromName, latitude: Number(fromLat), longitude: Number(fromLon), type: fromKind, fullName: fromName })
-    }
-    if (toLat && toLon && toName) {
-      onDest({ id: searchParams.get('toId') || 'to', name: toName, latitude: Number(toLat), longitude: Number(toLon), type: toKind, fullName: toName })
-    }
-  }, [searchParams, onFrom, onDest])
-  return null
-}
 
 function DestinationTrips({ from, dest, useNow, when, arriveBy, extraActions }: { from: any; dest: any; useNow: boolean; when: string; arriveBy: boolean; extraActions?: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false)

@@ -125,7 +125,7 @@ export default function AddressesPage() {
                 {a.description && <div className="text-sm text-violet-500/60">{a.description}</div>}
               </div>
               <button 
-                className="text-rose-500 text-sm hover:text-rose-600 transition-colors duration-200 px-3 py-1 hover:bg-rose-50/50 rounded-lg" 
+                className="text-white/60 text-sm hover:text-white/80 transition-colors duration-200 px-3 py-1 hover:bg-red-500/20 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg" 
                 onClick={() => remove(a.id)}
               >
                 🗑️ Remove

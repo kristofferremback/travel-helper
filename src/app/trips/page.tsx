@@ -7,6 +7,8 @@ import useSWR from 'swr'
 import axios from 'axios'
 import { useSession } from 'next-auth/react'
 import Typeahead, { TypeaheadItem } from '@/components/Typeahead'
+import { Card, CardHeader, Button, Input } from '@/components/ui'
+import TripCard, { type TripData } from '@/components/trip/TripCard'
 
 const fetcher = (url: string) => axios.get(url).then((r) => r.data)
 
@@ -107,22 +109,22 @@ export default function TripsPage() {
   if (!session) {
     return (
       <main className="space-y-6">
-        <div className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-8 text-center">
+        <Card className="p-8 text-center">
           <div className="text-4xl mb-4">🔐</div>
           <h2 className="text-xl font-semibold text-violet-800 mb-2">Sign in required</h2>
           <p className="text-violet-600">Please sign in to save and manage your trips.</p>
-        </div>
+        </Card>
       </main>
     )
   }
 
   return (
     <main className="space-y-6">
-      <section className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-6 shadow-sm space-y-4">
-        <div className="flex items-center gap-2">
+      <Card className="p-6 space-y-4">
+        <CardHeader>
           <span className="text-xl">🧭</span>
           <h2 className="text-lg font-semibold text-white/90 drop-shadow">Add trip</h2>
-        </div>
+        </CardHeader>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-3">
             <Typeahead
@@ -144,18 +146,27 @@ export default function TripsPage() {
               onClear={() => setTo(null)}
             />
           </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-white/90 drop-shadow mb-1">Label (optional)</label>
-              <input className="input" placeholder="Optional label" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <div className="flex flex-col gap-3 h-full">
+            <Input
+              label="Label (optional)"
+              placeholder="Optional label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+            <div className="flex justify-end mt-auto">
+              <Button
+                variant="primary"
+                size="lg"
+                disabled={!canSave}
+                onClick={saveTrip}
+              >
+                <span>✨</span>
+                <span>Save trip</span>
+              </Button>
             </div>
-            <button className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-3 text-sm font-medium text-white shadow hover:from-violet-700 hover:to-fuchsia-700 transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canSave} onClick={saveTrip}>
-              <span>✨</span>
-              <span>Save trip</span>
-            </button>
           </div>
         </div>
-      </section>
+      </Card>
 
       <section>
         <div className="flex items-center gap-2 mb-4">
@@ -164,16 +175,12 @@ export default function TripsPage() {
         </div>
         <ul className="space-y-3">
           {data?.trips?.map((t: Trip) => (
-            <li key={t.id} className="bg-gradient-to-br from-white/60 to-violet-50/40 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01] flex items-center justify-between">
-              <div>
-                <div className="font-medium text-violet-800">
-                  {t.label || `${t.fromPlace.name} → ${t.toPlace.name}`}
-                </div>
-                <div className="text-sm text-violet-600/80">{t.fromPlace.name} → {t.toPlace.name}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="text-sm px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 transition-colors" onClick={() => remove(t.id)}>🗑️ Remove</button>
-              </div>
+            <li key={t.id}>
+              <TripCard
+                trip={t as TripData}
+                onDelete={remove}
+                variant="interactive"
+              />
             </li>
           ))}
         </ul>

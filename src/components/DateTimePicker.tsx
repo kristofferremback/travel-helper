@@ -144,40 +144,55 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
         onClick={() => {
           if (!open && anchorRef.current) {
             const rect = anchorRef.current.getBoundingClientRect()
+            const popoverWidth = 320
+            const viewportWidth = window.innerWidth
+            const padding = 16
+            
+            let left = rect.left + window.scrollX
+            if (left + popoverWidth > viewportWidth - padding) {
+              left = viewportWidth - popoverWidth - padding
+            }
+            if (left < padding) {
+              left = padding
+            }
+            
             setPopoverPosition({
               top: rect.bottom + window.scrollY + 4,
-              left: rect.left + window.scrollX
+              left: left
             })
           }
           setOpen((v) => !v)
         }}
-        className={`border rounded px-2 py-1 bg-white text-gray-900 relative z-10 ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"}`}
+        className={`border border-white/30 rounded px-2 py-1 bg-white/20 backdrop-blur-sm text-white relative z-10 truncate w-full max-w-[140px] sm:max-w-none ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-white/25 cursor-pointer"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        {new Date(parseLocal(value)).toLocaleString([], { hour12: false, year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+        <span className="hidden sm:inline">
+          {new Date(parseLocal(value)).toLocaleString([], { hour12: false, year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+        </span>
+        <span className="inline sm:hidden">
+          {new Date(parseLocal(value)).toLocaleString([], { hour12: false, month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+        </span>
       </button>
       {open && createPortal(
         <div
           id="dtp-popover"
           role="dialog"
-          className="w-[320px] rounded border bg-white shadow-2xl p-3"
+          className="w-[320px] rounded-lg bg-white/20 backdrop-blur-sm border border-white/30 shadow-2xl p-3"
           style={{ 
             position: 'absolute',
             top: popoverPosition.top,
             left: popoverPosition.left,
-            zIndex: 9999,
-            backgroundColor: 'white',
-            border: '2px solid #333'
+            zIndex: 9999
           }}
           ref={() => {}}
         >
           <div className="flex items-center justify-between mb-2">
-            <button type="button" className="px-2 py-1 hover:bg-gray-100 rounded" onClick={() => goMonth(-1)} aria-label="Previous month">◀</button>
-            <div className="font-medium">{monthLabel}</div>
-            <button type="button" className="px-2 py-1 hover:bg-gray-100 rounded" onClick={() => goMonth(1)} aria-label="Next month">▶</button>
+            <button type="button" className="px-2 py-1 hover:bg-white/20 rounded text-white transition-colors" onClick={() => goMonth(-1)} aria-label="Previous month">◀</button>
+            <div className="font-medium text-white">{monthLabel}</div>
+            <button type="button" className="px-2 py-1 hover:bg-white/20 rounded text-white transition-colors" onClick={() => goMonth(1)} aria-label="Next month">▶</button>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-xs text-gray-500 mb-1">
+          <div className="grid grid-cols-7 gap-1 text-xs text-white/70 mb-1">
             {['Mo','Tu','We','Th','Fr','Sa','Su'].map((d) => (
               <div key={d} className="text-center">{d}</div>
             ))}
@@ -190,8 +205,8 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
                   key={idx}
                   type="button"
                   onClick={() => selectDay(date)}
-                  className={`h-8 text-sm rounded text-center ${
-                    isSelected ? "bg-blue-600 text-white" : inMonth ? "hover:bg-gray-100" : "text-gray-400 hover:bg-gray-50"
+                  className={`h-8 text-sm rounded text-center transition-colors ${
+                    isSelected ? "bg-violet-600 text-white" : inMonth ? "text-white hover:bg-white/20" : "text-white/40 hover:bg-white/10"
                   }`}
                 >
                   {date.getDate()}
@@ -200,30 +215,30 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
             })}
           </div>
           <div className="flex items-center gap-2 mb-3">
-            <label className="text-sm text-gray-600">Time</label>
+            <label className="text-sm text-white/90">Time</label>
             <select
-              className="border rounded px-2 py-1"
+              className="bg-white/20 border border-white/30 rounded px-2 py-1 text-white focus:outline-none focus:ring-2 focus:ring-violet-400"
               value={internal.getHours()}
               onChange={(e) => setHour(Number(e.target.value))}
             >
               {hours.map((h) => (
-                <option key={h} value={h}>{pad(h)}</option>
+                <option key={h} value={h} className="bg-gray-800 text-white">{pad(h)}</option>
               ))}
             </select>
-            <span>:</span>
+            <span className="text-white">:</span>
             <select
-              className="border rounded px-2 py-1"
+              className="bg-white/20 border border-white/30 rounded px-2 py-1 text-white focus:outline-none focus:ring-2 focus:ring-violet-400"
               value={Math.floor(internal.getMinutes() / 5) * 5}
               onChange={(e) => setMinute(Number(e.target.value))}
             >
               {minutes.map((m) => (
-                <option key={m} value={m}>{pad(m)}</option>
+                <option key={m} value={m} className="bg-gray-800 text-white">{pad(m)}</option>
               ))}
             </select>
           </div>
           <div className="flex justify-end gap-2">
-            <button type="button" className="px-3 py-1 rounded hover:bg-gray-100" onClick={() => setOpen(false)}>Cancel</button>
-            <button type="button" className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={commit}>Set</button>
+            <button type="button" className="px-3 py-1 rounded text-white hover:bg-white/20 transition-colors" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="px-3 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 transition-colors" onClick={commit}>Set</button>
           </div>
         </div>,
         document.body

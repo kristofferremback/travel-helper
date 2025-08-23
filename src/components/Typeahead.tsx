@@ -115,7 +115,7 @@ export default function Typeahead({ label, placeholder, value, onChangeText, onS
           aria-controls="ta-listbox"
           aria-activedescendant={open && activeIndex >= 0 ? `ta-opt-${activeIndex}` : undefined}
           aria-autocomplete="list"
-          className="input pr-8"
+          className="w-full px-3 py-2 pr-8 rounded-lg bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent hover:bg-white/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           placeholder={placeholder || 'Search stop or address'}
           value={value ?? query}
           onChange={(e) => { const v = e.target.value; setQuery(v); onChangeText?.(v) }}
@@ -144,7 +144,7 @@ export default function Typeahead({ label, placeholder, value, onChangeText, onS
             ref={listRef}
             id="ta-listbox"
             role="listbox"
-            className="card absolute z-20 mt-1 max-h-72 w-full overflow-auto divide-y bg-white/90 backdrop-blur"
+            className="absolute z-20 mt-1 max-h-72 w-full overflow-auto divide-y rounded-lg bg-white/20 backdrop-blur-sm border border-white/30 shadow-lg"
           >
             {items.map((s, i) => (
               <li
@@ -155,13 +155,13 @@ export default function Typeahead({ label, placeholder, value, onChangeText, onS
               >
                 <button
                   type="button"
-                  className={`w-full text-left p-2 ${i === activeIndex ? 'bg-blue-50' : 'hover:bg-blue-50'}`}
+                  className={`w-full text-left p-3 text-white transition-colors duration-200 ${i === activeIndex ? 'bg-white/20' : 'hover:bg-white/15'}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleSelect(i)}
                 >
                   <div className="flex items-center justify-between">
                     <span className="truncate">{s.name}</span>
-                    {s.type ? <span className="chip capitalize">{s.type}</span> : null}
+                    {s.type ? <span className="inline-flex items-center rounded-full bg-white/25 px-2 py-0.5 text-xs font-medium text-white/90 capitalize">{s.type}</span> : null}
                   </div>
                 </button>
               </li>
