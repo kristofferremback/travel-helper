@@ -6,6 +6,7 @@ import React, { Suspense, useEffect, useState } from 'react'
 import UrlPrefill from '../components/UrlPrefill'
 import type { Site, ReverseMode, GeoPosition } from '@/types'
 import { computeEndpoints } from '@/utils/location'
+import { formatLocalTime } from '@/utils/time'
 import { useSavedTrips } from '@/hooks/useSavedTrips'
 import LocationSearchSection from '@/components/trip/LocationSearchSection'
 import TimeSelectionSection from '@/components/trip/TimeSelectionSection'
@@ -28,13 +29,7 @@ export default function PlannerPage() {
 
   // Initialize default time to now (local)
   useEffect(() => {
-    const d = new Date()
-    const yyyy = d.getFullYear()
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    const HH = String(d.getHours()).padStart(2, '0')
-    const MM = String(d.getMinutes()).padStart(2, '0')
-    setWhen(`${yyyy}-${mm}-${dd}T${HH}:${MM}`)
+    setWhen(formatLocalTime(new Date()))
   }, [])
 
   // URL prefill handled by child component below (wrapped in Suspense)

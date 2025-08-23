@@ -27,3 +27,22 @@ export function formatLocalTime(date: Date): string {
 export function getCurrentLocalTimeString(): string {
   return formatLocalTime(new Date())
 }
+
+/**
+ * Format date to YYYYMMDD for API calls
+ */
+export function formatDateForAPI(date: Date): string {
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yyyy}${mm}${dd}`
+}
+
+/**
+ * Format time to HHMM for API calls
+ */
+export function formatTimeForAPI(date: Date): string {
+  const HH = String(date.getHours()).padStart(2, '0')
+  const MM = String(date.getMinutes()).padStart(2, '0')
+  return `${HH}${MM}`
+}

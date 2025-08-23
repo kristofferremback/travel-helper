@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import type { Site, Journey, TripOptions } from '@/types'
 import { createTripQueryParams } from '@/utils/api'
-import { formatTime } from '@/utils/time'
+import { formatTime, formatLocalTime } from '@/utils/time'
 import ModeBadge, { LineBadge } from '@/components/ModeBadge'
 import { Button } from '@/components/ui'
 
@@ -279,14 +279,6 @@ async function fetchTripsAtTime(
   }
 }
 
-function formatLocalTime(date: Date): string {
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const HH = String(date.getHours()).padStart(2, '0')
-  const MM = String(date.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}T${HH}:${MM}`
-}
 
 function processAndFilterTrips(trips: Journey[], useNow: boolean): Journey[] {
   // Sort trips chronologically

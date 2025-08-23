@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
+import { formatDateForAPI, formatTimeForAPI } from '@/utils/time'
 
 const JP2_BASE = process.env.SL_JP2_BASE_URL || 'https://journeyplanner.integration.sl.se/v2'
 
@@ -35,13 +36,8 @@ export async function GET(req: NextRequest) {
     if (when) {
       const d = new Date(when)
       if (!Number.isNaN(d.getTime())) {
-        const yyyy = d.getFullYear()
-        const mm = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
-        const HH = String(d.getHours()).padStart(2, '0')
-        const MM = String(d.getMinutes()).padStart(2, '0')
-        params['itd_date'] = `${yyyy}${mm}${dd}` // YYYYMMDD
-        params['itd_time'] = `${HH}${MM}` // HHMM
+        params['itd_date'] = formatDateForAPI(d) // YYYYMMDD
+        params['itd_time'] = formatTimeForAPI(d) // HHMM
       }
     }
     params['itd_trip_date_time_dep_arr'] = arriveBy ? 'arr' : 'dep'

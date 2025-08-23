@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import ModeBadge, { LineBadge } from '@/components/ModeBadge'
 import { Card, CardContent } from '@/components/ui'
-import { formatLocalTime } from '@/utils/time'
+import { formatLocalTime, formatTime } from '@/utils/time'
 import type { Site } from '@/types'
 
 interface TripResultsSectionProps {
@@ -225,13 +225,6 @@ export default function TripResultsSection({
     }
   }, [from?.latitude, from?.longitude, dest?.latitude, dest?.longitude, useNow, when, arriveBy])
 
-  const fmt = (timeString?: string) => {
-    if (!timeString) return ''
-    const date = new Date(timeString)
-    return Number.isNaN(date.getTime())
-      ? ''
-      : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-  }
 
   // Pick recommended trip:
   // For Leave now: first future trip; else top from main query; else first item
@@ -264,8 +257,8 @@ export default function TripResultsSection({
           </div>
           {preferred ? (
             <div className="text-sm text-gray-700">
-              {fmt(firstDepart?.estimated || firstDepart?.planned)} →{' '}
-              {fmt(firstArrive?.estimated || firstArrive?.planned)} ·{' '}
+              {formatTime(firstDepart?.estimated || firstDepart?.planned)} →{' '}
+              {formatTime(firstArrive?.estimated || firstArrive?.planned)} ·{' '}
               {Math.round((preferred.duration ?? 0) / 60)} min
             </div>
           ) : loading ? (
@@ -340,8 +333,8 @@ export default function TripResultsSection({
                   >
                     <div className="flex items-center gap-2">
                       <span>
-                        {fmt(depart?.estimated || depart?.planned)} →{' '}
-                        {fmt(arrive?.estimated || arrive?.planned)} · {Math.round((j.duration ?? 0) / 60)} min
+                        {formatTime(depart?.estimated || depart?.planned)} →{' '}
+                        {formatTime(arrive?.estimated || arrive?.planned)} · {Math.round((j.duration ?? 0) / 60)} min
                       </span>
                       {isPreferred && (
                         <span className="text-xs bg-gradient-to-r from-violet-400 to-fuchsia-400 text-white px-2 py-0.5 rounded-full font-medium">
@@ -369,8 +362,8 @@ export default function TripResultsSection({
                             <li key={k} className="flex items-center gap-2 flex-wrap">
                               <ModeBadge mode={l.mode} />
                               <span className="text-white flex-1 min-w-0">
-                                {l.origin?.name} ({fmt(l.origin?.estimated || l.origin?.planned)}) →{' '}
-                                {l.destination?.name} ({fmt(l.destination?.estimated || l.destination?.planned)}
+                                {l.origin?.name} ({formatTime(l.origin?.estimated || l.origin?.planned)}) →{' '}
+                                {l.destination?.name} ({formatTime(l.destination?.estimated || l.destination?.planned)}
                                 )
                               </span>
                               <LineBadge mode={l.mode} line={l.line} />

@@ -2,10 +2,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { formatLocalTime } from '@/utils/time'
 
 function pad(n: number) {
   return String(n).padStart(2, "0")
 }
+
 
 function parseLocal(value: string | undefined): Date {
   if (!value) return new Date()
@@ -22,14 +24,6 @@ function parseLocal(value: string | undefined): Date {
   return dt
 }
 
-function toLocalString(dt: Date): string {
-  const yyyy = dt.getFullYear()
-  const mm = pad(dt.getMonth() + 1)
-  const dd = pad(dt.getDate())
-  const HH = pad(dt.getHours())
-  const MM = pad(dt.getMinutes())
-  return `${yyyy}-${mm}-${dd}T${HH}:${MM}`
-}
 
 export default function DateTimePicker({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
@@ -128,7 +122,7 @@ export default function DateTimePicker({ value, onChange, disabled }: { value: s
   }
 
   function commit() {
-    onChange(toLocalString(internal))
+    onChange(formatLocalTime(internal))
     setOpen(false)
   }
 
